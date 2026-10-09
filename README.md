@@ -250,6 +250,8 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.8.8 (2026-10-09)
+- 🌈 聚合订阅支持绑定 V2 模板，自动转换为 V3 后绑定(#125)
 ### v0.8.7 (2026-10-03)
 - 🌈 Docker 镜像 latest 标签始终提供 arm64 架构(#122)
 - 🛠️ fix: mieru 节点使用 port-range 时无法保存配置(#124)
