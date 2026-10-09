@@ -12,12 +12,11 @@ import { createBlankTemplate } from '@/lib/template-v3-utils'
 import { api } from '@/lib/api'
 import { RULE_TEMPLATES } from '@/config/custom-rules-templates'
 import { ALL_TEMPLATE_PRESETS } from '@/lib/template-presets'
-
-interface UserTemplate {
-  id: number
-  name: string
-  rule_source: string
-}
+import {
+  convertV2RuleSourceToV3,
+  resolveV2TemplateSelection,
+  type V2UserTemplate,
+} from '@/lib/template-v2-to-v3'
 
 interface SubscribeFile {
   id: number
@@ -49,7 +48,7 @@ export function TemplateUploadDialog({
   const [selectedDnsPreset, setSelectedDnsPreset] = useState<string>('fake_ip_no_dnsleak')
 
   // V2 import states
-  const [userTemplates, setUserTemplates] = useState<UserTemplate[]>([])
+  const [userTemplates, setUserTemplates] = useState<V2UserTemplate[]>([])
   const [selectedV2Template, setSelectedV2Template] = useState<string>('')
   const [isFetchingTemplates, setIsFetchingTemplates] = useState(false)
 
@@ -306,45 +305,13 @@ export function TemplateUploadDialog({
 
     setIsConverting(true)
     try {
-      // Determine if it's a user template or preset template based on prefix
-      let ruleSourceUrl: string
-      if (selectedV2Template.startsWith('user:')) {
-        const templateId = selectedV2Template.replace('user:', '')
-        const template = userTemplates.find(t => t.id.toString() === templateId)
-        if (!template) {
-          toast.error('未找到选中的模板')
-          return
-        }
-        ruleSourceUrl = template.rule_source
-      } else if (selectedV2Template.startsWith('preset:')) {
-        const presetName = selectedV2Template.replace('preset:', '')
-        const preset = ALL_TEMPLATE_PRESETS.find(p => p.name === presetName)
-        if (!preset) {
-          toast.error('未找到选中的预设模板')
-          return
-        }
-        ruleSourceUrl = preset.url
-      } else {
-        toast.error('无效的模板选择')
+      const selection = resolveV2TemplateSelection(selectedV2Template, userTemplates)
+      if (!selection) {
+        toast.error('未找到选中的模板')
         return
       }
 
-      // Fetch the template content from URL
-      const fetchResponse = await api.post('/api/admin/templates/fetch-source', {
-        url: ruleSourceUrl,
-        use_proxy: false,
-      })
-      const v2Content = fetchResponse.data.content
-
-      // Convert to v3
-      const response = await api.post('/api/admin/template-v3/convert-v2', {
-        content: v2Content,
-      })
-
-      const { proxy_groups, rules, rule_providers } = response.data
-
-      // Generate v3 template YAML
-      const v3Content = generateV3TemplateFromConversion(proxy_groups, rules, rule_providers)
+      const v3Content = await convertV2RuleSourceToV3(selection.ruleSourceUrl, selectedDnsPreset)
 
       let name = newTemplateName.trim()
       if (!name.endsWith('.yaml') && !name.endsWith('.yml')) {
@@ -360,113 +327,10 @@ export function TemplateUploadDialog({
     }
   }
 
-  // Generate v3 template YAML from converted data
-  const generateV3TemplateFromConversion = (
-    proxyGroups: any[],
-    rules: string[],
-    ruleProviders: Record<string, any>
-  ): string => {
-    const lines: string[] = []
-
-    // Basic config
-    lines.push('mode: rule')
-
-    // DNS config from preset
-    const dnsPreset = RULE_TEMPLATES.dns[selectedDnsPreset as keyof typeof RULE_TEMPLATES.dns]
-    if (dnsPreset) {
-      lines.push('dns:')
-      // Indent the DNS content
-      const dnsLines = dnsPreset.content.split('\n')
-      for (const line of dnsLines) {
-        lines.push('  ' + line)
-      }
-    } else {
-      // Fallback to basic DNS config
-      lines.push('dns:')
-      lines.push('  enable: true')
-      lines.push('  enhanced-mode: fake-ip')
-      lines.push('  nameserver:')
-      lines.push('    - https://doh.pub/dns-query')
-      lines.push('  ipv6: false')
-    }
-
-    lines.push('proxies: null')
-
-    // Proxy groups
-    lines.push('proxy-groups:')
-    for (const group of proxyGroups) {
-      lines.push(`  - name: ${group.name}`)
-      lines.push(`    type: ${group.type}`)
-      if (group['include-all']) {
-        lines.push('    include-all: true')
-      }
-      if (group['include-all-proxies']) {
-        lines.push('    include-all-proxies: true')
-      }
-      if (group.filter) {
-        lines.push(`    filter: ${group.filter}`)
-      }
-      if (group['exclude-filter']) {
-        lines.push(`    exclude-filter: ${group['exclude-filter']}`)
-      }
-      if (group.proxies && group.proxies.length > 0) {
-        lines.push('    proxies:')
-        for (const proxy of group.proxies) {
-          lines.push(`      - ${proxy}`)
-        }
-      }
-      if (group.url) {
-        lines.push(`    url: ${group.url}`)
-      }
-      if (group.interval) {
-        lines.push(`    interval: ${group.interval}`)
-      }
-      if (group.tolerance) {
-        lines.push(`    tolerance: ${group.tolerance}`)
-      }
-    }
-
-    // Rules
-    if (rules.length > 0) {
-      lines.push('rules:')
-      for (const rule of rules) {
-        lines.push(`  - ${rule}`)
-      }
-    }
-
-    // Rule providers
-    if (Object.keys(ruleProviders).length > 0) {
-      lines.push('rule-providers:')
-      for (const [name, provider] of Object.entries(ruleProviders)) {
-        lines.push(`  ${name}:`)
-        lines.push(`    type: ${(provider as any).type}`)
-        lines.push(`    behavior: ${(provider as any).behavior}`)
-        lines.push(`    url: ${(provider as any).url}`)
-        lines.push(`    path: ${(provider as any).path}`)
-        lines.push(`    interval: ${(provider as any).interval}`)
-      }
-    }
-
-    return lines.join('\n')
-  }
-
   // Auto-fill template name when selecting a template
   const handleV2TemplateSelect = (value: string) => {
     setSelectedV2Template(value)
-    let baseName = ''
-    if (value.startsWith('user:')) {
-      const templateId = value.replace('user:', '')
-      const template = userTemplates.find(t => t.id.toString() === templateId)
-      if (template) {
-        baseName = template.name
-      }
-    } else if (value.startsWith('preset:')) {
-      const presetName = value.replace('preset:', '')
-      const preset = ALL_TEMPLATE_PRESETS.find(p => p.name === presetName)
-      if (preset) {
-        baseName = preset.label
-      }
-    }
+    const baseName = resolveV2TemplateSelection(value, userTemplates)?.baseName
     if (baseName) {
       setNewTemplateName(baseName)
     }
