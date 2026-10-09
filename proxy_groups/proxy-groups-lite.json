@@ -23,6 +23,12 @@
       },
       {
         "key": "openai"
+      },
+      {
+        "key": "claude",
+        "behavior": "classical",
+        "format": "yaml",
+        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/iluobei/clash-pt-rules/refs/heads/main/claude.yaml"
       }
     ]
   },

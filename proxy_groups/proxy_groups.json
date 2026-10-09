@@ -46,6 +46,15 @@
         "url": "https://gh-proxy.com/https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/openai.mrs",
         "path": "./ruleset/openai.mrs",
         "interval": 86400
+      },
+      {
+        "key": "claude",
+        "behavior": "classical",
+        "type": "http",
+        "format": "yaml",
+        "url": "https://gh-proxy.com/https://raw.githubusercontent.com/iluobei/clash-pt-rules/refs/heads/main/claude.yaml",
+        "path": "./ruleset/claude.yaml",
+        "interval": 86400
       }
     ],
     "ip_rules": []
