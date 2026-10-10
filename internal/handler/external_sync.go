@@ -614,6 +614,8 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 	createdCount := 0
 	skippedCount := 0
 	touchedNodeIDs := make(map[int64]bool)
+	// 收集需要写回 YAML 的节点更新，循环结束后批量写入，避免每个节点都完整读写一次订阅文件
+	var yamlUpdates []NodeUpdate
 
 	for _, node := range nodesToUpdate {
 		var existingNode *storage.Node
@@ -776,11 +778,11 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 			logger.Info("[外部订阅同步] 成功更新节点 (ID)", "node_name", existingNode.NodeName, "id", existingNode.ID)
 
 			// Sync to YAML files (handle name change if needed)
-			if subscribeDir != "" {
-				if err := syncNodeToYAMLFiles(subscribeDir, oldNodeName, existingNode.NodeName, existingNode.ClashConfig); err != nil {
-					logger.Info("[外部订阅同步] 同步节点 到YAML文件失败", "node_name", existingNode.NodeName, "error", err)
-				}
-			}
+			yamlUpdates = append(yamlUpdates, NodeUpdate{
+				OldName:         oldNodeName,
+				NewName:         existingNode.NodeName,
+				ClashConfigJSON: existingNode.ClashConfig,
+			})
 
 			syncedCount++
 			updatedCount++
@@ -815,6 +817,12 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 	}
 
 	logger.Info("[外部订阅同步] 订阅同步完成", "name", sub.Name, "synced_count", syncedCount, "total_count", len(nodesToUpdate), "updated", updatedCount, "created", createdCount, "skipped", skippedCount)
+
+	if subscribeDir != "" && len(yamlUpdates) > 0 {
+		if err := batchSyncNodesToYAMLFiles(subscribeDir, yamlUpdates); err != nil {
+			logger.Info("[外部订阅同步] 批量同步节点到YAML文件失败", "count", len(yamlUpdates), "error", err)
+		}
+	}
 
 	// 清理该外部订阅中已不存在的节点（仅 syncScope=all），保证聚合订阅能随源节点减少而减少
 	if syncScope == "all" {
