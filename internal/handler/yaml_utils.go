@@ -61,26 +61,16 @@ func RemoveUnicodeEscapeQuotes(yamlContent string) string {
 		// Get the content without quotes
 		content := strings.Trim(match, `"`)
 
-		// First convert Unicode escapes to actual characters to check the real first character
-		tempContent := convertUnicodeEscapes(content)
-
-		// Check if the unquoted string would start with YAML special characters that need quoting
-		// These characters have special meaning in YAML and need to be quoted
-		if len(tempContent) > 0 {
-			firstChar := tempContent[0]
-			// Characters that need quoting at the start: [ ] { } * & ! | > ' " % @ ` # , ? : -
-			if firstChar == '[' || firstChar == ']' || firstChar == '{' || firstChar == '}' ||
-				firstChar == '*' || firstChar == '&' || firstChar == '!' || firstChar == '|' ||
-				firstChar == '>' || firstChar == '\'' || firstChar == '"' || firstChar == '%' ||
-				firstChar == '@' || firstChar == '`' || firstChar == '#' || firstChar == ',' ||
-				firstChar == '?' || firstChar == ':' || firstChar == '-' {
-				// Keep the quotes but still convert Unicode escapes inside
-				return `"` + convertUnicodeEscapes(content) + `"`
-			}
+		// 去引号前必须按 YAML 双引号规则完整解码：\\、\"、\t 等转义在去掉引号后会变成字面量，
+		// 只还原 \U 而直接去引号，会让 \ 每次写回都翻倍（\.exe -> \\.exe -> \\\\.exe ...）
+		var decoded string
+		if err := yaml.Unmarshal([]byte(match), &decoded); err != nil || !isSafePlainScalar(decoded) {
+			// 解码失败或不能作为 plain 标量：保留双引号，仅还原 Unicode 转义
+			return `"` + convertUnicodeEscapes(content) + `"`
 		}
 
 		// Safe to remove quotes
-		return content
+		return decoded
 	})
 
 	// Step 2: Convert ALL Unicode escapes back to actual characters (quoted or not)
@@ -105,6 +95,19 @@ func RemoveUnicodeEscapeQuotes(yamlContent string) string {
 	}
 
 	return result
+}
+
+// isSafePlainScalar 判断字符串去掉引号作为 plain 标量写出后，能否被原样解析回同一个字符串
+func isSafePlainScalar(s string) bool {
+	if s == "" || strings.ContainsAny(s, "\n\r\t") {
+		return false
+	}
+	var parsed map[string]any
+	if err := yaml.Unmarshal([]byte("k: "+s), &parsed); err != nil {
+		return false
+	}
+	v, ok := parsed["k"].(string)
+	return ok && v == s
 }
 
 // convertUnicodeEscapes converts Unicode escape sequences to actual characters
