@@ -56,6 +56,7 @@ import surfboardIcon from '@/assets/icons/surfboard_color.png'
 import surgeIcon from '@/assets/icons/surge_color.png'
 import surgeMacIcon from '@/assets/icons/surgeformac_icon_color.png'
 import loonIcon from '@/assets/icons/loon_color.png'
+import meowxIcon from '@/assets/icons/meowx_color.png'
 import quanxIcon from '@/assets/icons/quanx_color.png'
 import egernIcon from '@/assets/icons/egern_color.png'
 import singboxIcon from '@/assets/icons/sing-box_color.png'
@@ -94,9 +95,17 @@ const ICON_MAP: Record<string, any> = {
   'openclash-fakeip': Monitor,
 }
 
+// 「自动识别」的图标(lucide sparkles 轮廓)。清单里 icon 是给 <img src> 用的,放不了组件,用内联 data URI
+const autoIcon =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z'/%3E%3C/svg%3E"
+
 // Client types configuration with icons and names
 const CLIENT_TYPES = [
-  { type: 'auto', name: 'Auto（自动识别）', icon: clashIcon },
+  // auto:后端按 User-Agent 判断客户端下发对应格式(internal/handler/client_ua.go),一条链接通吃,
+  // 认不出时回落 Clash YAML
+  { type: 'auto', name: 'Auto（自动识别）', icon: autoIcon },
+  // 官方客户端 MeowX:格式与 Clash 相同(后端 client_ua.go 把 t=meowx 当 clash)
+  { type: 'meowx', name: 'MeowX', icon: meowxIcon },
   { type: 'clash', name: 'Clash', icon: clashIcon },
   { type: 'stash', name: 'Stash', icon: stashIcon },
   { type: 'clash-to-shadowrocket', name: 'Shadowrocket', icon: shadowrocketIcon },
