@@ -250,6 +250,12 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.8.9 (2026-10-13)
+- ⬆️ proxyparser 升到 v0.3.4:Shadowrocket 放行 Snell v1–v6(模板版原来把 v4 以上整个丢掉)、Stash 放开到 v6,并同步上游 Sub-Store 一轮(Surge 的 udp-relay 只留给 Shadowsocks / SOCKS5、Loon server-dns、Egern ip_version 等)
+- 🌈 订阅客户端类型新增 MeowX(?t=meowx,格式与 Clash 相同);Auto 自动识别补上 v2ray 一族的兜底(v2rayU / v2rayA / 只报 v2ray/x.y.z 的客户端以前拿到的是 Clash 配置)与 Happ —— 这张表同时是「拦截未知订阅 UA」的白名单,这些客户端此前开了拦截会被 403;Auto 换成自己的图标;附测试
+- 🛠️ fix: 写回 YAML 时去引号的逻辑改成以解析器为准(#126 的后续)—— #127 修好了反斜杠翻倍,但同一个函数靠正则猜「哪里是双引号字符串、去掉引号安不安全」,还有别的写坏:流式列表里带逗号 / 方括号的名字被拆开(proxies: ["🇭🇰 香港, 01", DIRECT] 变成三项),规则里写的 \u4e00 正则被改成汉字。现在位置、解码后的值、所在上下文全部取自解析器:能原样写成 plain 的才去引号(放回它所在的上下文再解析一遍核对),不能的保留引号、只把 \U 转义换成字符;最后整份再解析一遍与原文逐节点比对,不同就退回保留引号的写法,所以这个函数改不了 YAML 的数据。nameserver-policy 下面不管嵌在哪一层都保留引号;不是合法 YAML 的文本原样返回;附测试(含 2000 组随机内容连续写回三轮)
+- fix: 修复写回 YAML 时反斜杠指数翻倍
+- feat: AI 服务规则组加入 Claude 规则集(clash-pt-rules 的 claude.yaml)
 ### v0.8.8 (2026-10-09)
 - 🌈 聚合订阅支持绑定 V2 模板，自动转换为 V3 后绑定(#125)
 ### v0.8.7 (2026-10-03)
