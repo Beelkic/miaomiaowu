@@ -250,6 +250,10 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.8.10 (2026-10-16)
+- 🌈 节点探测新增「不可用节点自动从订阅移除」,探测单次请求超时降到 3 秒
+- 🌈 规则集新增「抓取代理」(#125):主控连不上 GitHub 时规则集改从加速站抓取
+- ⬆️ proxyparser 升到 v0.3.5:Stash 订阅里的 mrs 规则集原样下发,不再把 .mrs 改写成 .yaml(Stash 已支持 mrs)
 ### v0.8.9 (2026-10-13)
 - ⬆️ proxyparser 升到 v0.3.4:Shadowrocket 放行 Snell v1–v6(模板版原来把 v4 以上整个丢掉)、Stash 放开到 v6,并同步上游 Sub-Store 一轮(Surge 的 udp-relay 只留给 Shadowsocks / SOCKS5、Loon server-dns、Egern ip_version 等)
 - 🌈 订阅客户端类型新增 MeowX(?t=meowx,格式与 Clash 相同);Auto 自动识别补上 v2ray 一族的兜底(v2rayU / v2rayA / 只报 v2ray/x.y.z 的客户端以前拿到的是 Clash 配置)与 Happ —— 这张表同时是「拦截未知订阅 UA」的白名单,这些客户端此前开了拦截会被 403;Auto 换成自己的图标;附测试
