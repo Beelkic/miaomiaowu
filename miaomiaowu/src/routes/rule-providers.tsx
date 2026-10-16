@@ -45,6 +45,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { RuleProviderFetchProxyCard } from '@/components/rule-providers/fetch-proxy-card'
 
 export const Route = createFileRoute('/rule-providers')({
   beforeLoad: async ({ context }) => {
@@ -195,6 +196,8 @@ function RuleProvidersPage() {
             <Plus className='mr-2 size-4' /> 新建规则集
           </Button>
         </section>
+
+        <RuleProviderFetchProxyCard />
 
         <div className='mt-6 space-y-3'>
           {isLoading && (

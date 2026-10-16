@@ -65,6 +65,13 @@ func (h *RuleProvidersHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		h.handleCreate(w, r)
 	case strings.HasSuffix(path, "/refresh") && r.Method == http.MethodPost:
 		h.handleRefresh(w, r, strings.TrimSuffix(path, "/refresh"))
+	// 抓取代理的设置:排在「按 id 取 / 改」前面,否则 proxy 会被当成一个 id
+	case path == "proxy" && r.Method == http.MethodGet:
+		h.handleProxyGet(w, r)
+	case path == "proxy" && r.Method == http.MethodPut:
+		h.handleProxyPut(w, r)
+	case path == "proxy/test" && r.Method == http.MethodPost:
+		h.handleProxyTest(w, r)
 	case path != "" && r.Method == http.MethodGet:
 		h.handleGet(w, r, path)
 	case path != "" && r.Method == http.MethodPut:
@@ -243,7 +250,7 @@ func (h *RuleProvidersHandler) handleRefresh(w http.ResponseWriter, r *http.Requ
 // fetchInto 抓一次并写库。抓取失败只记错误、**不动已有内容** ——
 // 上次抓到的还能继续服务,总比让订阅拿到空文件强。
 func (h *RuleProvidersHandler) fetchInto(ctx context.Context, id int64, url string) error {
-	content, err := fetchRuleProviderContent(ctx, url)
+	content, err := h.fetchRuleProviderContent(ctx, url)
 	if err != nil {
 		_ = h.repo.MarkRuleProviderFetched(ctx, id, "", err.Error())
 		return err
@@ -251,36 +258,13 @@ func (h *RuleProvidersHandler) fetchInto(ctx context.Context, id int64, url stri
 	return h.repo.MarkRuleProviderFetched(ctx, id, content, "")
 }
 
-// fetchRuleProviderContent 抓远程规则集。
+// fetchRuleProviderContent 抓远程规则集:按「抓取代理」的设置决定要不要先经 GitHub 加速站
+// (见 rule_provider_proxy.go),其余照常直连。
 //
 // 走 SSRF 安全客户端:地址是管理员填的,但「管理员填的」不等于「安全」——
 // 主控能访问的内网和云元数据接口,不该因为一个输入框就暴露出去(订阅导入踩过)。
-func fetchRuleProviderContent(ctx context.Context, url string) (string, error) {
-	client := newSSRFSafeHTTPClient(30 * time.Second)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", "mmwx-rule-provider/1.0")
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, ruleProviderMaxBytes+1))
-	if err != nil {
-		return "", err
-	}
-	if len(body) > ruleProviderMaxBytes {
-		return "", fmt.Errorf("内容过大(上限 %d MB)", ruleProviderMaxBytes>>20)
-	}
-	if len(body) == 0 {
-		return "", errors.New("远程返回空内容")
-	}
-	return string(body), nil
+func (h *RuleProvidersHandler) fetchRuleProviderContent(ctx context.Context, target string) (string, error) {
+	return fetchRuleProviderVia(ctx, loadRuleProviderProxyConfig(ctx, h.repo), target, fetchRuleProviderRaw)
 }
 
 // ServeRuleProviderFile GET /rules/{name} —— 免鉴权。
