@@ -306,6 +306,7 @@ func main() {
 	// 与 TCPing 互补 —— 那个只拨 server:port,握手失败/密码错/证书不对一概看不出来。
 	// store 必须在这里建好:路由和下面的调度器要共用同一个内存实例。
 	nodeProbeStore := handler.NewNodeProbeStore(0)
+	handler.SetNodeProbeStore(nodeProbeStore) // 订阅生成时按它过滤探测不可用的节点
 	mux.Handle("/api/admin/node-probe", auth.RequireAdmin(tokenStore, userRepo, handler.NewNodeProbeHandler(repo, nodeProbeStore)))
 	mux.Handle("/api/admin/node-probe/", auth.RequireAdmin(tokenStore, userRepo, handler.NewNodeProbeHandler(repo, nodeProbeStore)))
 

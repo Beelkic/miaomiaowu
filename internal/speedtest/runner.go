@@ -48,6 +48,10 @@ type Options struct {
 	Timeout      time.Duration
 	Threads      int
 	LatencyOnly  bool // true 仅测真连接延迟(Cloudflare 204 多采样)不跑大文件下载
+	// 下面三项给「节点探测」用:探测只关心通不通,不需要测速那套完整流程。
+	LatencyTimeout time.Duration // 单次 204 请求的超时;0 = 默认 8 秒
+	SkipEgressIP   bool          // 不查出口 IP(探测用不上,省一次经节点的外网请求)
+	FailFast       bool          // 首个采样就失败即判不通,不再重试剩余采样(挂掉的节点只花一次超时)
 }
 
 // RunNodeTest 用 mihomo 起单节点代理，测延迟 + 下行吞吐。
@@ -102,11 +106,14 @@ func RunNodeTest(ctx context.Context, mihomoBin, clashConfigJSON string, opts Op
 	}
 	defer func() { stop(); os.RemoveAll(workdir) }()
 
-	egressIP := measureEgressIP(ctx)
+	var egressIP string
+	if !opts.SkipEgressIP {
+		egressIP = measureEgressIP(ctx)
+	}
 
 	// LatencyOnly:只测真连接延迟(Cloudflare 204 多采样),不跑下载
 	if opts.LatencyOnly {
-		latency := measureLatencyCloudflare(ctx, cfLatencySamples)
+		latency := measureLatencyCloudflare(ctx, cfLatencySamples, opts.LatencyTimeout, opts.FailFast)
 		return Result{LatencyMs: latency, EgressIP: egressIP}, nil
 	}
 
@@ -222,12 +229,16 @@ func measureLatency(ctx context.Context) int64 {
 
 // measureLatencyCloudflare 用 Cloudflare 204(全球边缘 + CDN 边)多次采样,取最快 2 个均值;
 // 首包受 TLS 握手 / mihomo cold-start 影响,平均后更接近"真连接延迟"。全部失败返回 -1。
-func measureLatencyCloudflare(ctx context.Context, samples int) int64 {
+// timeout 为 0 用默认 8 秒;failFast 为 true 时首个采样失败就直接返回 -1(节点探测用)。
+func measureLatencyCloudflare(ctx context.Context, samples int, timeout time.Duration, failFast bool) int64 {
 	if samples <= 0 {
 		samples = cfLatencySamples
 	}
+	if timeout <= 0 {
+		timeout = 8 * time.Second
+	}
 	client := proxyClient()
-	client.Timeout = 8 * time.Second
+	client.Timeout = timeout
 	probes := make([]int64, 0, samples)
 	for i := 0; i < samples; i++ {
 		if ctx.Err() != nil {
@@ -240,6 +251,9 @@ func measureLatencyCloudflare(ctx context.Context, samples int) int64 {
 		start := time.Now()
 		resp, err := client.Do(req)
 		if err != nil {
+			if failFast && len(probes) == 0 {
+				return -1
+			}
 			continue
 		}
 		io.Copy(io.Discard, resp.Body)

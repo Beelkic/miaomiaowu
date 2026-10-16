@@ -44,6 +44,10 @@ type NodeProbeState struct {
 	// Source 最近一次探测的执行端,便于排查"为什么这个延迟不对"
 	// (主控在海外机房,测出来的延迟和国内测速端能差很多)。
 	Source string `json:"source"`
+	// Removed 已因不可用被自动从订阅里摘掉(见 node_probe_removal.go)。
+	// NodeName 一并记下:静态订阅文件里只有名字没有 ID,下发时按名字剔。
+	Removed  bool   `json:"removed"`
+	NodeName string `json:"node_name,omitempty"`
 }
 
 // NodeProbeStore 节点探测结果的内存存储。
@@ -97,6 +101,38 @@ func (s *NodeProbeStore) MarkAnnounced(nodeID int64, announced bool) {
 	defer s.mu.Unlock()
 	if st := s.data[nodeID]; st != nil {
 		st.Announced = announced
+	}
+}
+
+// MarkRemoved 记下节点是否已被自动从订阅里摘掉。
+func (s *NodeProbeStore) MarkRemoved(nodeID int64, name string, removed bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if st := s.data[nodeID]; st != nil {
+		st.Removed = removed
+		st.NodeName = name
+	}
+}
+
+// RemovedNodes 当前被摘掉的节点:ID → 名字。订阅生成时按它过滤。
+func (s *NodeProbeStore) RemovedNodes() map[int64]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[int64]string)
+	for id, st := range s.data {
+		if st.Removed {
+			out[id] = st.NodeName
+		}
+	}
+	return out
+}
+
+// ClearRemoved 把所有节点放回订阅(功能关闭时调用,不等下一轮探测)。
+func (s *NodeProbeStore) ClearRemoved() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, st := range s.data {
+		st.Removed = false
 	}
 }
 

@@ -35,12 +35,15 @@ type ProbeState = {
   announced: boolean
   samples: ProbeSample[] | null
   source: string
+  removed: boolean
 }
 type ProbeStatus = {
   enabled: boolean
   tester_id: number
   enabled_count: number
   resync_minutes: number
+  remove_enabled: boolean
+  remove_minutes: number
   interval_sec: number
   // 后端 NodeProbeStore.All() 返回 map[int64]NodeProbeState → JSON 里是**对象**(键为节点 ID),
   // 不是数组。按数组解会直接 "object is not iterable" 把整页打崩。
@@ -148,6 +151,8 @@ export function NodeProbePanel({ active = true }: { active?: boolean }) {
       enabled?: boolean
       tester_id?: number
       resync_minutes?: number
+      remove_enabled?: boolean
+      remove_minutes?: number
     }) => (await api.put('/api/admin/node-probe/settings', patch)).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['node-probe'] })
@@ -184,6 +189,21 @@ export function NodeProbePanel({ active = true }: { active?: boolean }) {
     setResyncDraft(String(safe))
     if (safe !== (status?.resync_minutes ?? 0)) {
       settingsMutation.mutate({ resync_minutes: safe })
+    }
+  }
+
+  // 「自动从订阅移除」的阈值,同样本地草稿 + 失焦提交
+  const [removeDraft, setRemoveDraft] = useState('')
+  useEffect(() => {
+    if (status) setRemoveDraft(String(status.remove_minutes ?? 0))
+  }, [status])
+  const commitRemove = () => {
+    const n = Number(removeDraft)
+    const safe =
+      Number.isFinite(n) && n >= 0 ? Math.min(Math.floor(n), 1440) : 0
+    setRemoveDraft(String(safe))
+    if (safe !== (status?.remove_minutes ?? 0)) {
+      settingsMutation.mutate({ remove_minutes: safe })
     }
   }
 
@@ -267,6 +287,49 @@ export function NodeProbePanel({ active = true }: { active?: boolean }) {
               15 分钟才会重同步一次,避免频繁请求机场接口。
             </p>
           </div>
+
+          <div className='space-y-2'>
+            <div className='flex items-center justify-between gap-4'>
+              <div className='space-y-0.5'>
+                <Label htmlFor='probe-remove'>不可用节点自动从订阅移除</Label>
+                <p className='text-muted-foreground text-xs'>
+                  判定不可用的节点下发订阅时自动剔除,恢复后自动放回;不改节点的启用状态
+                </p>
+              </div>
+              <Switch
+                id='probe-remove'
+                checked={Boolean(status?.remove_enabled)}
+                disabled={statusLoading || settingsMutation.isPending}
+                onCheckedChange={(v) =>
+                  settingsMutation.mutate({ remove_enabled: v })
+                }
+              />
+            </div>
+            {status?.remove_enabled && (
+              <>
+                <div className='flex items-center gap-2'>
+                  <span className='text-muted-foreground text-sm'>掉线满</span>
+                  <Input
+                    id='probe-remove-minutes'
+                    type='number'
+                    min={0}
+                    max={1440}
+                    className='w-28'
+                    value={removeDraft}
+                    onChange={(e) => setRemoveDraft(e.target.value)}
+                    onBlur={commitRemove}
+                    disabled={settingsMutation.isPending}
+                  />
+                  <span className='text-muted-foreground text-sm'>
+                    分钟后移除(0 = 判定不可用即移除)
+                  </span>
+                </div>
+                <p className='text-muted-foreground text-xs'>
+                  不会把代理组剔空,也不会把全部节点剔光;被规则或链式代理直接引用的节点会保留。探测源在海外机房时结果未必代表用户的网络,建议选国内测速端并设一个阈值。
+                </p>
+              </>
+            )}
+          </div>
         </div>
 
         <div className='flex items-center justify-between'>
@@ -322,6 +385,11 @@ export function NodeProbePanel({ active = true }: { active?: boolean }) {
                         {down && (
                           <Badge variant='destructive' className='shrink-0'>
                             不可用
+                          </Badge>
+                        )}
+                        {st?.removed && (
+                          <Badge variant='secondary' className='shrink-0'>
+                            已从订阅移除
                           </Badge>
                         )}
                       </div>

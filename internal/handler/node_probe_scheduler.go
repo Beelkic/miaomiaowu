@@ -33,11 +33,15 @@ const (
 	// 真机上就是这么被坑的:两个节点(一好一坏)一起探测 → 通 0 / 不通 2;
 	// 单独探好的那个 → 1.5 秒通过。
 	//
-	// 代价:整轮是串行的,单节点上限 20 秒,所以一轮最多消化 ~15 个挂掉的节点
-	// (5 分钟周期)。节点更多时下一次 tick 会被丢掉,相当于自动降频,不会堆积。
+	// 代价:整轮是串行的。挂掉的节点在首次 204 请求 3 秒超时后就判不通(见下面两个常量),
+	// 一轮 5 分钟能消化约 80 个挂掉的节点。节点更多时下一次 tick 会被丢掉,相当于自动降频,不会堆积。
 	nodeProbeConcurrency = 1
-	// nodeProbePerNodeTimeout 单个节点的探测上限。连不上的节点不该拖住整轮。
-	nodeProbePerNodeTimeout = 20 * time.Second
+	// nodeProbeLatencyTimeout 单次真连请求(Cloudflare 204)的超时。真能用的节点 3 秒内一定有响应;
+	// 挂掉的节点首个采样超时即判不通,不再重试剩余采样。
+	nodeProbeLatencyTimeout = 3 * time.Second
+	// nodeProbePerNodeTimeout 单个节点的总上限,只是兜底:覆盖 mihomo 进程启动 + 最多 3 次采样。
+	// 正常情况下挂掉的节点 3 秒多就返回,到不了这里。
+	nodeProbePerNodeTimeout = 12 * time.Second
 	// nodeProbeFailK 连续几次失败才判定不可用并告警。单次失败多半是这一刻的抖动。
 	nodeProbeFailK = 2
 
@@ -143,6 +147,7 @@ func (s *NodeProbeScheduler) runCycle(ctx context.Context) {
 
 	testerID := s.resolveTesterID(ctx)
 	resyncMinutes := s.resolveResyncMinutes(ctx)
+	removeCfg := loadNodeProbeRemoveConfig(ctx, s.repo)
 	started := time.Now()
 
 	// 探测完成后把已删除/已取消勾选的节点从内存里清掉,否则 map 只增不减。
@@ -180,7 +185,7 @@ func (s *NodeProbeScheduler) runCycle(ctx context.Context) {
 			}
 			mu.Unlock()
 
-			s.reconcileNodeState(ctx, t, state, resyncMinutes)
+			s.reconcileNodeState(ctx, t, state, resyncMinutes, removeCfg)
 		}(target)
 	}
 	wg.Wait()
@@ -213,7 +218,12 @@ func (s *NodeProbeScheduler) probeOne(ctx context.Context, t storage.ProbeTarget
 		log.Printf("[NodeProbe] 主控本机没有可用的 mihomo,跳过节点 %q: %v", t.NodeName, err)
 		return 0, false, "master(mihomo 缺失)"
 	}
-	res, err := speedtest.RunNodeTest(probeCtx, bin, t.ClashConfig, speedtest.Options{LatencyOnly: true})
+	res, err := speedtest.RunNodeTest(probeCtx, bin, t.ClashConfig, speedtest.Options{
+		LatencyOnly:    true,
+		LatencyTimeout: nodeProbeLatencyTimeout,
+		SkipEgressIP:   true,
+		FailFast:       true,
+	})
 	if err != nil {
 		return 0, false, "master"
 	}
@@ -223,10 +233,10 @@ func (s *NodeProbeScheduler) probeOne(ctx context.Context, t storage.ProbeTarget
 // reconcileNodeState 按「连续 K 次失败 → 判不可用;恢复 → 判恢复」处理状态翻转,
 // 只在翻转时动作,不每轮刷屏。
 //
-// 两件事各自独立开关,互不牵连:Telegram 通知(通知设置)、掉线自动重同步外部订阅
-// (订阅设置)。
+// 三件事各自独立开关,互不牵连:Telegram 通知(通知设置)、掉线自动重同步外部订阅、
+// 不可用节点自动从订阅移除(都在探测设置里)。
 func (s *NodeProbeScheduler) reconcileNodeState(ctx context.Context, t storage.ProbeTargetNode,
-	state NodeProbeState, resyncMinutes int) {
+	state NodeProbeState, resyncMinutes int, removeCfg nodeProbeRemoveConfig) {
 	down := state.FailStreak >= nodeProbeFailK && !state.Announced
 	up := state.FailStreak == 0 && state.Announced
 
@@ -243,6 +253,32 @@ func (s *NodeProbeScheduler) reconcileNodeState(ctx context.Context, t storage.P
 	// 重同步与「是否刚翻转」无关:节点可能已经挂了很久,阈值也可能是用户后改大的。
 	if resyncMinutes > 0 && state.FailStreak >= nodeProbeFailK {
 		s.maybeResyncSubscriptions(ctx, t, state, resyncMinutes)
+	}
+
+	s.reconcileRemoval(t, state, removeCfg)
+}
+
+// reconcileRemoval 「不可用节点自动从订阅移除」:掉线满阈值 → 摘掉;恢复 → 放回;
+// 功能关闭 → 把之前摘掉的放回。只在状态翻转时写日志。
+func (s *NodeProbeScheduler) reconcileRemoval(t storage.ProbeTargetNode, state NodeProbeState, cfg nodeProbeRemoveConfig) {
+	if !cfg.Enabled {
+		if state.Removed {
+			s.store.MarkRemoved(t.ID, t.NodeName, false)
+		}
+		return
+	}
+	down := state.FailStreak >= nodeProbeFailK &&
+		downDuration(state) >= time.Duration(cfg.Minutes)*time.Minute
+	switch {
+	case down && !state.Removed:
+		s.store.MarkRemoved(t.ID, t.NodeName, true)
+		log.Printf("[NodeProbe] 节点 %q 已掉线 %s,自动从订阅移除", t.NodeName, downDuration(state).Round(time.Minute))
+	case state.FailStreak == 0 && state.Removed:
+		s.store.MarkRemoved(t.ID, t.NodeName, false)
+		log.Printf("[NodeProbe] 节点 %q 已恢复,放回订阅", t.NodeName)
+	case state.Removed:
+		// 仍不可用:保持摘掉,但名字可能改过,顺手同步
+		s.store.MarkRemoved(t.ID, t.NodeName, true)
 	}
 }
 

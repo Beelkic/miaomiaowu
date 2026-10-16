@@ -901,6 +901,13 @@ func (h *SubscriptionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 					}
 				}
 
+				// 静态订阅文件:探测判定不可用且开启了自动移除的节点,下发时剔掉(模板路径已在节点列表过滤)
+				if !fromTemplate {
+					if n := removeProbeDownProxiesFromYAML(rootMap); n > 0 {
+						logger.Info("[Subscription] 已剔除探测不可用节点", "count", n)
+					}
+				}
+
 				// 重新排序 proxy-groups 中每个代理组的字段，并剥离 dialer-proxy-group（MMW 自定义字段，不输出到订阅响应）
 				for i := 0; i < len(rootMap.Content); i += 2 {
 					if rootMap.Content[i].Value == "proxy-groups" {
@@ -2414,6 +2421,8 @@ func (h *SubscriptionHandler) generateFromTemplate(ctx context.Context, username
 	if err != nil {
 		return nil, fmt.Errorf("获取节点列表失败: %w", err)
 	}
+	// 探测判定不可用且开启了自动移除的节点,不进订阅(见 node_probe_removal.go)
+	nodes = filterProbeRemovedNodes(nodes)
 
 	// 按用户配置的节点顺序排序
 	if settings, err := h.repo.GetUserSettings(ctx, username); err == nil && len(settings.NodeOrder) > 0 {
@@ -2625,6 +2634,8 @@ func (h *SubscriptionHandler) generateFromSelectedTags(ctx context.Context, user
 	if err != nil {
 		return nil, fmt.Errorf("获取节点列表失败: %w", err)
 	}
+	// 探测判定不可用且开启了自动移除的节点,不进订阅(见 node_probe_removal.go)
+	nodes = filterProbeRemovedNodes(nodes)
 
 	if settings, err := h.repo.GetUserSettings(ctx, username); err == nil && len(settings.NodeOrder) > 0 {
 		sortNodesByNodeOrder(nodes, settings.NodeOrder)
