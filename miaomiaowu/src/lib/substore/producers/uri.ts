@@ -810,6 +810,32 @@ export default function URI_Producer(): Producer {
                     proxy.server
                 }:${proxy.port}${anytlsParams.length > 0 ? '/?' + anytlsParams.join('&') : ''}#${encodeURIComponent(proxy.name)}`;
                 break;
+            case 'mieru':
+                // mieru 官方「简单分享链接」,与后端 proxyparser 的 encodeMieru 保持一致(#129):
+                //   mierus://用户名:密码@服务器?profile=..&port=..&protocol=..[&mtu=..&multiplexing=..&handshake-mode=..&traffic-pattern=..]
+                // 官方客户端可直接导入;port 可为端口范围。
+                const mieruParams: string[] = [];
+                mieruParams.push(`profile=${encodeURIComponent(proxy.name || 'default')}`);
+                mieruParams.push(`port=${proxy['port-range'] || proxy.port}`);
+                mieruParams.push(
+                    `protocol=${String(proxy.transport || 'TCP').toUpperCase() === 'UDP' ? 'UDP' : 'TCP'}`,
+                );
+                if (proxy.mtu) {
+                    mieruParams.push(`mtu=${proxy.mtu}`);
+                }
+                if (proxy.multiplexing) {
+                    mieruParams.push(`multiplexing=${encodeURIComponent(proxy.multiplexing)}`);
+                }
+                if (proxy['handshake-mode']) {
+                    mieruParams.push(`handshake-mode=${encodeURIComponent(proxy['handshake-mode'])}`);
+                }
+                if (proxy['traffic-pattern']) {
+                    mieruParams.push(`traffic-pattern=${encodeURIComponent(proxy['traffic-pattern'])}`);
+                }
+                result = `mierus://${encodeURIComponent(proxy.username || '')}:${encodeURIComponent(
+                    proxy.password || '',
+                )}@${proxy.server}?${mieruParams.join('&')}`;
+                break;
             case 'wireguard':
                 const wireguardParams: string[] = [];
 
