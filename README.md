@@ -250,6 +250,9 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.9.1 (2026-10-20)
+- 🛠️ fix: 节点列表复制 mieru 节点的 URI 时剪贴板为空(#129)
+- 🛠️ fix: mieru 节点导入丢掉 udp 与 handshake-mode(#130)—— proxyparser 升到 v0.3.9,移除 mierus 兼容层
 ### v0.9.0 (2026-10-16)
 - 🌈 节点探测新增「不可用节点自动从订阅移除」,探测单次请求超时降到 3 秒
 - 🌈 规则集新增「抓取代理」(#125):主控连不上 GitHub 时规则集改从加速站抓取
