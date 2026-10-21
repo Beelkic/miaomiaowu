@@ -250,6 +250,8 @@ MIT License
 <details>
 <summary>更新日志</summary>
 
+### v0.9.2 (2026-10-21)
+- 🔒 security: 构建工具链下限 go1.26.10(修复 CVE-2026-111943 / GO-2026-6809 失信中间证书未拒绝),x/text 升到 v0.39.0
 ### v0.9.1 (2026-10-20)
 - 🛠️ fix: 节点列表复制 mieru 节点的 URI 时剪贴板为空(#129)
 - 🛠️ fix: mieru 节点导入丢掉 udp 与 handshake-mode(#130)—— proxyparser 升到 v0.3.9,移除 mierus 兼容层
