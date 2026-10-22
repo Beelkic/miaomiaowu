@@ -3,7 +3,7 @@
 
 set -e
 
-VERSION="v0.9.2"
+VERSION="v0.9.3"
 GITHUB_REPO="iluobei/miaomiaowu"
 VERSION_FILE=".version"
 PORT_FILE=".port"
