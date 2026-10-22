@@ -49,6 +49,9 @@ const (
 	settingNodeProbeEnabled = "node_probe_enabled"
 	// settingNodeProbeTesterID 探测源测速端 ID。空/0 = 用主控本机。
 	settingNodeProbeTesterID = "node_probe_tester_id"
+	// settingNodeProbeAllNodes 「始终探测所有节点」:打开后探测全部启用的节点,不必逐个勾选。
+	// 默认关 —— 探测是串行的,节点很多时一轮可能跑不完 5 分钟(下一轮会被丢掉,自动降频)。
+	settingNodeProbeAllNodes = "node_probe_all_nodes"
 	// settingNodeProbeResyncMinutes 节点掉线满 N 分钟后自动重新同步其所属用户的外部订阅。
 	// 空/0 = 关闭。机场换服务器时订阅里的节点信息会变,重新拉一次往往就自愈了。
 	settingNodeProbeResyncMinutes = "node_probe_resync_minutes"
@@ -136,7 +139,13 @@ func (s *NodeProbeScheduler) runCycle(ctx context.Context) {
 	if v, _ := s.repo.GetSystemSetting(ctx, settingNodeProbeEnabled); v != "1" {
 		return // 总开关关闭
 	}
-	targets, err := s.repo.ListProbeEnabledNodes(ctx)
+	var targets []storage.ProbeTargetNode
+	var err error
+	if v, _ := s.repo.GetSystemSetting(ctx, settingNodeProbeAllNodes); v == "1" {
+		targets, err = s.repo.ListAllEnabledProbeTargets(ctx)
+	} else {
+		targets, err = s.repo.ListProbeEnabledNodes(ctx)
+	}
 	if err != nil {
 		log.Printf("[NodeProbe] 取待探测节点失败: %v", err)
 		return

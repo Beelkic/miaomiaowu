@@ -40,6 +40,7 @@ type ProbeState = {
 type ProbeStatus = {
   enabled: boolean
   tester_id: number
+  probe_all: boolean
   enabled_count: number
   resync_minutes: number
   remove_enabled: boolean
@@ -150,6 +151,7 @@ export function NodeProbePanel({ active = true }: { active?: boolean }) {
     mutationFn: async (patch: {
       enabled?: boolean
       tester_id?: number
+      probe_all?: boolean
       resync_minutes?: number
       remove_enabled?: boolean
       remove_minutes?: number
@@ -175,6 +177,7 @@ export function NodeProbePanel({ active = true }: { active?: boolean }) {
   })
 
   const intervalMin = Math.round((status?.interval_sec ?? 300) / 60)
+  const probeAll = Boolean(status?.probe_all)
 
   // 数字输入用本地草稿 + 失焦提交:直接在 onChange 里提交会把「30」的输入过程
   // 变成 3 → 30 两次请求,中间那次还会真的把阈值改成 3 分钟。
@@ -226,6 +229,21 @@ export function NodeProbePanel({ active = true }: { active?: boolean }) {
               checked={Boolean(status?.enabled)}
               disabled={statusLoading || settingsMutation.isPending}
               onCheckedChange={(v) => settingsMutation.mutate({ enabled: v })}
+            />
+          </div>
+
+          <div className='flex items-center justify-between gap-4'>
+            <div className='space-y-0.5'>
+              <Label htmlFor='probe-all'>始终探测所有节点</Label>
+              <p className='text-muted-foreground text-xs'>
+                打开后探测全部启用的节点,不必逐个勾选。探测是串行的,节点很多时一轮可能跑不完,会自动降频
+              </p>
+            </div>
+            <Switch
+              id='probe-all'
+              checked={probeAll}
+              disabled={statusLoading || settingsMutation.isPending}
+              onCheckedChange={(v) => settingsMutation.mutate({ probe_all: v })}
             />
           </div>
 
@@ -291,7 +309,7 @@ export function NodeProbePanel({ active = true }: { active?: boolean }) {
           <div className='space-y-2'>
             <div className='flex items-center justify-between gap-4'>
               <div className='space-y-0.5'>
-                <Label htmlFor='probe-remove'>不可用节点自动从订阅移除</Label>
+                <Label htmlFor='probe-remove'>订阅过滤不可用节点</Label>
                 <p className='text-muted-foreground text-xs'>
                   判定不可用的节点下发订阅时自动剔除,恢复后自动放回;不改节点的启用状态
                 </p>
@@ -336,7 +354,9 @@ export function NodeProbePanel({ active = true }: { active?: boolean }) {
           <p className='text-sm font-medium'>
             可探测的节点
             <span className='text-muted-foreground ml-2 text-xs font-normal'>
-              {`已勾选 ${status?.enabled_count ?? 0} / ${externalNodes.length}`}
+              {probeAll
+                ? `全部 ${externalNodes.length} 个`
+                : `已勾选 ${status?.enabled_count ?? 0} / ${externalNodes.length}`}
             </span>
           </p>
         </div>
@@ -360,8 +380,8 @@ export function NodeProbePanel({ active = true }: { active?: boolean }) {
                     className='hover:bg-muted/40 flex items-center gap-3 p-3'
                   >
                     <Checkbox
-                      checked={node.probe_enabled}
-                      disabled={toggleMutation.isPending}
+                      checked={probeAll ? node.enabled : node.probe_enabled}
+                      disabled={probeAll || toggleMutation.isPending}
                       onCheckedChange={(v) =>
                         toggleMutation.mutate({
                           node_id: node.id,
@@ -393,7 +413,7 @@ export function NodeProbePanel({ active = true }: { active?: boolean }) {
                           </Badge>
                         )}
                       </div>
-                      {node.probe_enabled && st?.source && (
+                      {(probeAll || node.probe_enabled) && st?.source && (
                         <p className='text-muted-foreground mt-0.5 text-xs'>
                           {`探测源 ${st.source}`}
                           {avail !== null && ` · ${`可用率 ${avail}%`}`}
@@ -401,7 +421,7 @@ export function NodeProbePanel({ active = true }: { active?: boolean }) {
                       )}
                     </div>
 
-                    {node.probe_enabled ? (
+                    {probeAll || node.probe_enabled ? (
                       samples.length === 0 ? (
                         <span className='text-muted-foreground flex items-center gap-1 text-xs'>
                           <Loader2 className='h-3 w-3 animate-spin' />

@@ -21,7 +21,7 @@ func mkProbeNode(t *testing.T, repo *TrafficRepository, name, originalServer str
 
 // 待探测清单的筛选:勾选了 + 启用中。
 //
-// **不能**按 original_server 过滤。妙妙屋X 那边用 original_server='' 筛外部节点,
+// **不能**按 original_server 过滤。妙妙屋X 那边用 original_server=” 筛外部节点,
 // 因为它那里存的是自建服务器名;本项目里这一列是「手动改地址前的旧地址备份」,
 // 照抄会把改过地址的节点莫名排除。这条用例专门钉住这个差异。
 func TestListProbeEnabledNodesFiltering(t *testing.T) {
@@ -147,5 +147,36 @@ func TestCountMatchesListProbeEnabled(t *testing.T) {
 	}
 	if count != 2 {
 		t.Fatalf("= %d, want 2(改过地址的节点也要算)", count)
+	}
+}
+
+// 「始终探测所有节点」:不看 probe_enabled,只排除已禁用的。
+func TestListAllEnabledProbeTargets(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	a := mkProbeNode(t, repo, "未勾选-启用", "", true)
+	b := mkProbeNode(t, repo, "勾选-启用", "", true)
+	_ = mkProbeNode(t, repo, "已禁用", "", false)
+	if err := repo.SetNodeProbeEnabled(ctx, b, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := repo.ListAllEnabledProbeTargets(ctx)
+	if err != nil {
+		t.Fatalf("取清单: %v", err)
+	}
+	seen := map[int64]bool{}
+	for _, g := range got {
+		seen[g.ID] = true
+	}
+	if len(got) != 2 || !seen[a] || !seen[b] {
+		t.Fatalf("应取到两个启用节点(含未勾选的),实得 %d 个: %+v", len(got), got)
+	}
+	if n, _ := repo.CountEnabledNodes(ctx); n != 2 {
+		t.Fatalf("CountEnabledNodes = %d, want 2", n)
+	}
+	if n, _ := repo.CountProbeEnabledNodes(ctx); n != 1 {
+		t.Fatalf("CountProbeEnabledNodes = %d, want 1(勾选模式的计数不受影响)", n)
 	}
 }

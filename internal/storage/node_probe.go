@@ -61,6 +61,45 @@ func (r *TrafficRepository) ListProbeEnabledNodes(ctx context.Context) ([]ProbeT
 	return out, rows.Err()
 }
 
+// ListAllEnabledProbeTargets 取全部启用的节点作为探测对象,不看 probe_enabled。
+// 「始终探测所有节点」开关打开时调度器走这条,用户不必逐个勾选。
+func (r *TrafficRepository) ListAllEnabledProbeTargets(ctx context.Context) ([]ProbeTargetNode, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("traffic repository not initialized")
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, node_name, protocol, username, clash_config
+		FROM nodes
+		WHERE enabled = 1
+		ORDER BY id ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("list enabled nodes as probe targets: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ProbeTargetNode
+	for rows.Next() {
+		var n ProbeTargetNode
+		if err := rows.Scan(&n.ID, &n.NodeName, &n.Protocol, &n.Username, &n.ClashConfig); err != nil {
+			return nil, fmt.Errorf("scan probe target: %w", err)
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// CountEnabledNodes 启用的节点总数,「始终探测所有节点」模式下前端显示用。
+func (r *TrafficRepository) CountEnabledNodes(ctx context.Context) (int, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("traffic repository not initialized")
+	}
+	var n int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM nodes WHERE enabled = 1`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count enabled nodes: %w", err)
+	}
+	return n, nil
+}
+
 // SetNodeProbeEnabled 开关某个节点的探测。
 func (r *TrafficRepository) SetNodeProbeEnabled(ctx context.Context, nodeID int64, enabled bool) error {
 	if r == nil || r.db == nil {

@@ -45,7 +45,14 @@ func (h *nodeProbeHandler) handleStatus(w http.ResponseWriter, r *http.Request) 
 	resyncRaw, _ := h.repo.GetSystemSetting(ctx, settingNodeProbeResyncMinutes)
 	resyncMinutes, _ := strconv.Atoi(strings.TrimSpace(resyncRaw))
 	removeCfg := loadNodeProbeRemoveConfig(ctx, h.repo)
-	count, _ := h.repo.CountProbeEnabledNodes(ctx)
+	allRaw, _ := h.repo.GetSystemSetting(ctx, settingNodeProbeAllNodes)
+	probeAll := allRaw == "1"
+	var count int
+	if probeAll {
+		count, _ = h.repo.CountEnabledNodes(ctx)
+	} else {
+		count, _ = h.repo.CountProbeEnabledNodes(ctx)
+	}
 
 	// 内存 ring 的快照。节点多时这份 JSON 会比较大(每节点最多 288 个采样点),
 	// 但探测是用户逐个勾选的,通常只有十几个。
@@ -55,6 +62,7 @@ func (h *nodeProbeHandler) handleStatus(w http.ResponseWriter, r *http.Request) 
 		"success":        true,
 		"enabled":        enabled == "1",
 		"tester_id":      testerID,
+		"probe_all":      probeAll,
 		"resync_minutes": resyncMinutes,
 		"remove_enabled": removeCfg.Enabled,
 		"remove_minutes": removeCfg.Minutes,
@@ -71,6 +79,8 @@ func (h *nodeProbeHandler) handleUpdateSettings(w http.ResponseWriter, r *http.R
 		// (服务器设置那边就吃过这个亏:值类型字段没提交即被零值覆盖)。
 		Enabled  *bool  `json:"enabled"`
 		TesterID *int64 `json:"tester_id"`
+		// ProbeAll 始终探测所有启用的节点,不必逐个勾选。
+		ProbeAll *bool `json:"probe_all"`
 		// ResyncMinutes 节点掉线满 N 分钟自动重同步外部订阅;0 = 关闭。
 		ResyncMinutes *int `json:"resync_minutes"`
 		// RemoveEnabled / RemoveMinutes 不可用节点自动从订阅移除;分钟数 0 = 判定不可用即移除。
@@ -88,6 +98,16 @@ func (h *nodeProbeHandler) handleUpdateSettings(w http.ResponseWriter, r *http.R
 			v = "1"
 		}
 		if err := h.repo.SetSystemSetting(ctx, settingNodeProbeEnabled, v); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	if req.ProbeAll != nil {
+		v := "0"
+		if *req.ProbeAll {
+			v = "1"
+		}
+		if err := h.repo.SetSystemSetting(ctx, settingNodeProbeAllNodes, v); err != nil {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
