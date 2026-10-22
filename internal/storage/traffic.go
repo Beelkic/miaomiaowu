@@ -4793,8 +4793,11 @@ func (r *TrafficRepository) ListProxyProviderConfigs(ctx context.Context, userna
 	return configs, nil
 }
 
-// ListProxyProviderConfigsBySubscription returns all proxy provider configs for an external subscription
-func (r *TrafficRepository) ListProxyProviderConfigsBySubscription(ctx context.Context, externalSubscriptionID int64) ([]ProxyProviderConfig, error) {
+// ListProxyProviderConfigsBySubscription returns all proxy provider configs for an external subscription.
+//
+// 必须同时按 username 过滤:外部订阅 ID 是全局自增的,只按 ID 查会让任何登录用户
+// 枚举到别人的代理集合配置(含上游请求头)—— GitHub issue #131 报告的越权读取。
+func (r *TrafficRepository) ListProxyProviderConfigsBySubscription(ctx context.Context, externalSubscriptionID int64, username string) ([]ProxyProviderConfig, error) {
 	if r == nil || r.db == nil {
 		return nil, errors.New("traffic repository not initialized")
 	}
@@ -4805,8 +4808,8 @@ func (r *TrafficRepository) ListProxyProviderConfigsBySubscription(ctx context.C
 			health_check_timeout, health_check_lazy, health_check_expected_status,
 			COALESCE(filter, ''), COALESCE(exclude_filter, ''), COALESCE(exclude_type, ''),
 			COALESCE(geo_ip_filter, ''), COALESCE(override, ''), process_mode, created_at, updated_at
-		FROM proxy_provider_configs WHERE external_subscription_id = ? ORDER BY id ASC
-	`, externalSubscriptionID)
+		FROM proxy_provider_configs WHERE external_subscription_id = ? AND username = ? ORDER BY id ASC
+	`, externalSubscriptionID, username)
 	if err != nil {
 		return nil, fmt.Errorf("list proxy provider configs by subscription: %w", err)
 	}

@@ -111,7 +111,7 @@ func handleListProxyProviderConfigs(w http.ResponseWriter, r *http.Request, repo
 			writeError(w, http.StatusBadRequest, errors.New("invalid external_subscription_id"))
 			return
 		}
-		configs, err = repo.ListProxyProviderConfigsBySubscription(r.Context(), externalSubID)
+		configs, err = repo.ListProxyProviderConfigsBySubscription(r.Context(), externalSubID, username)
 	} else {
 		configs, err = repo.ListProxyProviderConfigs(r.Context(), username)
 	}
@@ -358,9 +358,9 @@ func handleDeleteProxyProviderConfig(w http.ResponseWriter, r *http.Request, rep
 		return
 	}
 
-	// 删除前先清理缓存（如果是MMW模式）
+	// 删除前先清理缓存（如果是MMW模式）。先确认归属:否则任何用户猜个 ID 就能清掉别人的缓存。
 	config, err := repo.GetProxyProviderConfig(r.Context(), id)
-	if err == nil && config != nil && config.ProcessMode == "mmw" {
+	if err == nil && config != nil && config.Username == username && config.ProcessMode == "mmw" {
 		GetProxyProviderCache().Delete(id)
 		logger.Info("[代理集合] 删除配置时清理缓存", "config_id", id, "name", config.Name)
 	}

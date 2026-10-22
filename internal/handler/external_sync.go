@@ -1236,7 +1236,7 @@ func syncProxyProviderNodesToYAML(ctx context.Context, repo *storage.TrafficRepo
 	}
 
 	// 获取此外部订阅对应的代理集合配置
-	configs, err := repo.ListProxyProviderConfigsBySubscription(ctx, sub.ID)
+	configs, err := repo.ListProxyProviderConfigsBySubscription(ctx, sub.ID, sub.Username)
 	if err != nil {
 		return fmt.Errorf("list proxy provider configs: %w", err)
 	}
