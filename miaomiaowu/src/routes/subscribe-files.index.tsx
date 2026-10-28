@@ -6704,7 +6704,7 @@ const handleUpload = () => {
                 className='font-mono text-sm'
               />
               <p className='text-xs text-muted-foreground'>
-                同步时加在节点名前面，已有此前缀不会重复叠加。留空则与未配置时一样使用机场原名。已有节点是否改名仍由「保留节点名称」决定。
+                给你的订阅节点添加前缀，例如〖机场A〗香港、〖机场B〗香港。
               </p>
             </div>
             <div className='space-y-2'>
