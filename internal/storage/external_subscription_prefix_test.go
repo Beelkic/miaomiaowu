@@ -28,6 +28,10 @@ func TestExternalSubscriptionNamePrefixRoundTrip(t *testing.T) {
 	if got.NamePrefix != "〖机场A〗" {
 		t.Fatalf("prefix = %q, want 〖机场A〗", got.NamePrefix)
 	}
+	if got.AppliedNamePrefix != "" {
+		t.Fatalf("applied prefix = %q, want empty until sync", got.AppliedNamePrefix)
+	}
+	got.AppliedNamePrefix = "【aa】"
 	if !got.AutoUpdate || got.UpdateIntervalMinutes != 60 {
 		t.Fatalf("auto update fields changed: %+v", got)
 	}
@@ -44,6 +48,9 @@ func TestExternalSubscriptionNamePrefixRoundTrip(t *testing.T) {
 	}
 	if got.NamePrefix != "〖机场A〗" || got.NodeCount != 3 || got.Upload != 10 {
 		t.Fatalf("sync-style update dropped fields: prefix=%q count=%d upload=%d", got.NamePrefix, got.NodeCount, got.Upload)
+	}
+	if got.AppliedNamePrefix != "【aa】" {
+		t.Fatalf("applied prefix dropped on sync-style update: %q", got.AppliedNamePrefix)
 	}
 
 	got.NamePrefix = "[机场A] "
@@ -94,6 +101,9 @@ func TestExternalSubscriptionNamePrefixRoundTrip(t *testing.T) {
 	if cleared.NamePrefix != "" {
 		t.Fatalf("cleared prefix = %q", cleared.NamePrefix)
 	}
+	if cleared.AppliedNamePrefix != "【aa】" {
+		t.Fatalf("clearing the desired prefix also cleared the applied prefix: %q", cleared.AppliedNamePrefix)
+	}
 
 	// 未写入 name_prefix 的旧行应读出空字符串，同步行为与升级前一致。
 	if _, err := repo.db.ExecContext(ctx, `INSERT INTO external_subscriptions (username, name, url) VALUES (?, ?, ?)`, "alice", "旧订阅", "https://example.com/old"); err != nil {
@@ -105,5 +115,8 @@ func TestExternalSubscriptionNamePrefixRoundTrip(t *testing.T) {
 	}
 	if legacy.NamePrefix != "" {
 		t.Fatalf("legacy prefix = %q, want empty", legacy.NamePrefix)
+	}
+	if legacy.AppliedNamePrefix != "" {
+		t.Fatalf("legacy applied prefix = %q, want empty", legacy.AppliedNamePrefix)
 	}
 }

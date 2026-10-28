@@ -375,6 +375,8 @@ func handleUpdateExternalSubscription(w http.ResponseWriter, r *http.Request, re
 		AutoUpdate:            autoUpdate,
 		UpdateIntervalMinutes: updateInterval,
 		NamePrefix:            namePrefixFromRequest(payload.NamePrefix, existing.NamePrefix),
+		// 已写到节点上的前缀只在同步成功后推进。这里改期望前缀不能把它清掉，否则下次同步对不上旧名字。
+		AppliedNamePrefix: existing.AppliedNamePrefix,
 	}
 
 	if err := repo.UpdateExternalSubscription(r.Context(), sub); err != nil {
