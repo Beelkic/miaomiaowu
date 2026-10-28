@@ -6704,7 +6704,7 @@ const handleUpload = () => {
                 className='font-mono text-sm'
               />
               <p className='text-xs text-muted-foreground'>
-                给你的订阅节点添加前缀，例如〖机场A〗香港、〖机场B〗香港。
+                给节点名加前缀，例如〖机场A〗香港。
               </p>
             </div>
             <div className='space-y-2'>
