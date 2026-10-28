@@ -3821,8 +3821,7 @@ vless://uuid@example.com:443?type=ws&security=tls&path=/websocket#VLESS节点
                           className='font-mono text-sm'
                         />
                         <p className='text-muted-foreground text-xs'>
-                          导入和后续同步都会把这段文字加在节点名前面，例如
-                          〖机场A〗香港。已经带有此前缀时不会重复叠加，留空则仍使用机场原名。已保存节点是否改名仍由「保留节点名称」决定。
+                          给节点名加前缀，例如〖机场A〗香港。
                         </p>
                       </div>
                       <div className='space-y-2 rounded-md border p-3'>
