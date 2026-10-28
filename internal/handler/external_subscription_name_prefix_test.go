@@ -32,6 +32,14 @@ func TestExternalSubscriptionNamePrefixAPI(t *testing.T) {
 	if created.NamePrefix != "〖机场A〗" {
 		t.Fatalf("created prefix = %q", created.NamePrefix)
 	}
+	stored, err := repo.GetExternalSubscription(ctx, created.ID, "bob")
+	if err != nil {
+		t.Fatalf("get created: %v", err)
+	}
+	stored.AppliedNamePrefix = "【aa】"
+	if err := repo.UpdateExternalSubscription(ctx, stored); err != nil {
+		t.Fatalf("set applied prefix: %v", err)
+	}
 	if !created.AutoUpdate || created.UpdateIntervalMinutes != 30 {
 		t.Fatalf("auto update not stored: %+v", created)
 	}
@@ -46,6 +54,13 @@ func TestExternalSubscriptionNamePrefixAPI(t *testing.T) {
 	updated := decodeExternalSub(t, rec)
 	if updated.NamePrefix != "〖机场A〗" {
 		t.Fatalf("omitted prefix was wiped: %q", updated.NamePrefix)
+	}
+	reloaded, err := repo.GetExternalSubscription(ctx, created.ID, "bob")
+	if err != nil {
+		t.Fatalf("reload after omit: %v", err)
+	}
+	if reloaded.AppliedNamePrefix != "【aa】" {
+		t.Fatalf("editing the subscription wiped the applied prefix: %q", reloaded.AppliedNamePrefix)
 	}
 	if updated.TrafficMode != "download" {
 		t.Fatalf("traffic mode = %q", updated.TrafficMode)
@@ -69,6 +84,13 @@ func TestExternalSubscriptionNamePrefixAPI(t *testing.T) {
 	spaced := decodeExternalSub(t, rec)
 	if spaced.NamePrefix != "[机场A] " {
 		t.Fatalf("trailing space prefix = %q", spaced.NamePrefix)
+	}
+	reloaded, err = repo.GetExternalSubscription(ctx, created.ID, "bob")
+	if err != nil {
+		t.Fatalf("reload after prefix edit: %v", err)
+	}
+	if reloaded.NamePrefix != "[机场A] " || reloaded.AppliedNamePrefix != "【aa】" {
+		t.Fatalf("prefix edit = name %q applied %q", reloaded.NamePrefix, reloaded.AppliedNamePrefix)
 	}
 
 	rec = serveExternalSub(t, h, http.MethodGet, "/api/user/external-subscriptions", "", "bob")
