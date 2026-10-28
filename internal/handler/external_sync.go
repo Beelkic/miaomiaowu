@@ -530,6 +530,11 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 			continue
 		}
 
+		// 只在起名时加前缀，不改变后面的匹配、更新、新建和删除。
+		// 空前缀时名字与原来一致；已有此前缀则不再叠加。
+		proxyName = applyNamePrefix(sub.NamePrefix, proxyName)
+		proxyMap["name"] = proxyName
+
 		// Append subscription info to node name
 		if subInfoSuffix != "" {
 			proxyName += subInfoSuffix
@@ -589,7 +594,10 @@ func syncSingleExternalSubscriptionWithSelection(ctx context.Context, client *ht
 		removedByFilterCount := 0
 
 		for _, existing := range existingNodes {
-			if existing.RawURL == sub.URL && filterRegex.MatchString(existing.NodeName) {
+			// 过滤仍针对机场原始节点名。去掉已写入的前缀后再匹配，避免前缀里的「订阅」等词误删节点。
+			// 前缀为空时比较的字符串与原来相同。
+			filterName := nodeNameWithoutPrefix(sub.NamePrefix, existing.NodeName)
+			if existing.RawURL == sub.URL && filterRegex.MatchString(filterName) {
 				if err := repo.DeleteNodeForSync(ctx, existing.ID, username); err != nil {
 					logger.Info("[外部订阅同步] 删除已过滤历史节点失败", "node_name", existing.NodeName, "id", existing.ID, "error", err)
 					remainingNodes = append(remainingNodes, existing)
@@ -1701,6 +1709,29 @@ func copyMapForSync(m map[string]any) map[string]any {
 		}
 	}
 	return result
+}
+
+// applyNamePrefix prepends prefix to a remote node name.
+// An empty or whitespace-only prefix leaves name unchanged.
+// If name already starts with prefix, it is returned as-is so repeated syncs do not stack.
+func applyNamePrefix(prefix, name string) string {
+	if strings.TrimSpace(prefix) == "" {
+		return name
+	}
+	if strings.HasPrefix(name, prefix) {
+		return name
+	}
+	return prefix + name
+}
+
+// nodeNameWithoutPrefix strips a display prefix previously applied by applyNamePrefix.
+// An empty prefix, or a name that does not start with it, is returned unchanged so
+// node-name filters keep their previous behavior.
+func nodeNameWithoutPrefix(prefix, nodeName string) string {
+	if strings.TrimSpace(prefix) == "" || !strings.HasPrefix(nodeName, prefix) {
+		return nodeName
+	}
+	return strings.TrimPrefix(nodeName, prefix)
 }
 
 // buildSubInfoSuffix builds a suffix string with remaining traffic and days for node names.
